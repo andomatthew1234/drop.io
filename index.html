@@ -5,371 +5,822 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>LocalDrop - LAN Share</title>
     
-    <!-- Tailwind CSS & QR Generator CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 
     <style>
         body { background-color: #0b0f19; color: #f3f4f6; font-family: system-ui, -apple-system, sans-serif; }
         .modal-backdrop { background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(8px); }
         .hidden { display: none !important; }
-        .device-card:hover { border-color: #3b82f6; }
+        .device-card:hover { border-color: #3b82f6; transform: translateY(-2px); }
+        .tab-active { background-color: #1f2937; border-color: #3b82f6; color: #60a5fa; }
+        .tab-inactive { background-color: transparent; border-color: transparent; color: #9ca3af; }
+        .tab-inactive:hover { background-color: #111827; }
+        .loader { border: 3px solid #1f2937; border-top: 3px solid #3b82f6; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        pre code.hljs { border-radius: 0.75rem; padding: 1rem; font-size: 0.875rem; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #4b5563; }
     </style>
 </head>
-<body class="min-h-screen flex flex-col items-center justify-between p-4 md:p-8">
+<body class="min-h-screen flex flex-col items-center p-4 md:p-8">
 
     <!-- Top Navigation -->
-    <header class="w-full max-w-2xl flex items-center justify-between border-b border-gray-800 pb-4 mb-6">
-        <div class="flex items-center gap-2">
-            <div class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div>
+    <header class="w-full max-w-5xl flex items-center justify-between border-b border-gray-800 pb-4 mb-8">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                <i data-lucide="network"></i>
+            </div>
             <h1 class="text-xl font-black tracking-tight text-white">LocalDrop</h1>
         </div>
-        
         <div class="flex items-center gap-3">
-            <button onclick="toggleQRModal()" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 font-medium px-3 py-1.5 rounded-lg border border-gray-700 transition">
-                📲 Show LAN QR
+            <a href="/api/get-backup-client" download class="flex items-center gap-2 text-xs bg-emerald-900/50 hover:bg-emerald-800/80 text-emerald-300 font-bold px-4 py-2 rounded-lg border border-emerald-700/50 transition shadow-lg">
+                <i data-lucide="hard-drive" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">File History</span>
+            </a>
+            <button onclick="openTimeMachine()" class="flex items-center gap-2 text-xs bg-indigo-900/50 hover:bg-indigo-800/80 text-indigo-300 font-bold px-4 py-2 rounded-lg border border-indigo-700/50 transition shadow-lg">
+                <i data-lucide="clock" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">Time Machine</span>
             </button>
-            <div id="connection-status" class="text-xs font-mono px-3 py-1.5 rounded-lg bg-gray-800 border border-gray-700 text-gray-400">
-                Connecting...
+            <button onclick="toggleQRModal()" class="flex items-center gap-2 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 font-medium px-4 py-2 rounded-lg border border-gray-700 transition">
+                <i data-lucide="qr-code" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">Show LAN QR</span>
+            </button>
+            <div id="connection-status" class="flex items-center gap-2 text-xs font-mono px-4 py-2 rounded-lg bg-gray-900 border border-gray-700 text-gray-400 transition-colors">
+                <i data-lucide="wifi" class="w-4 h-4" id="conn-icon"></i>
+                <span id="conn-text">Connecting...</span>
             </div>
         </div>
     </header>
 
-    <!-- Main Container -->
-    <main class="w-full max-w-2xl flex-1 flex flex-col gap-6">
+    <main class="w-full max-w-5xl flex-1 grid grid-cols-1 md:grid-cols-12 gap-6">
 
-        <!-- My Device Info Banner -->
-        <section class="bg-gray-900/90 border border-gray-800 p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
-            <div class="flex items-center gap-4 w-full sm:w-auto">
-                <div class="w-12 h-12 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-xl">
-                    💻
+        <!-- LEFT PANEL: COMPOSE -->
+        <div class="md:col-span-7 flex flex-col gap-6">
+            <section class="bg-gray-900/90 border border-gray-800 p-6 rounded-2xl shadow-xl">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="text-xs text-gray-400 font-bold uppercase tracking-wider flex items-center gap-2">
+                        <i data-lucide="monitor-smartphone" class="w-4 h-4"></i> Your Identity
+                    </div>
+                    <div class="text-[10px] text-gray-500 uppercase tracking-widest font-mono">CODE: <span id="my-code-display" class="text-emerald-400 font-bold text-sm">----</span></div>
                 </div>
-                <div>
-                    <div class="text-xs text-gray-400 font-medium uppercase tracking-wider">Your Device</div>
-                    <input type="text" id="my-name-input" class="bg-transparent font-bold text-lg text-white border-b border-dashed border-gray-700 focus:border-blue-500 focus:outline-none" />
+                <div class="flex items-center gap-3 bg-gray-950 p-3 rounded-xl border border-gray-800 focus-within:border-blue-500 transition-colors">
+                    <input type="text" id="my-name-input" class="w-full bg-transparent font-bold text-lg text-white focus:outline-none" />
+                    <button onclick="toggleVisibility()" id="vis-btn" class="p-2 text-gray-400 hover:text-white transition rounded-lg hover:bg-gray-800">
+                        <i data-lucide="eye" id="vis-icon" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </section>
+
+            <section class="bg-gray-900/90 border border-gray-800 p-2 rounded-2xl shadow-xl flex flex-col sm:flex-row gap-2 h-[400px]">
+                <div class="flex sm:flex-col gap-2 p-2 sm:w-24 border-b sm:border-b-0 sm:border-r border-gray-800 overflow-x-auto custom-scrollbar">
+                    <button onclick="switchTab('text')" id="tab-text" class="tab-active flex-shrink-0 flex-1 flex flex-col items-center justify-center gap-1 p-3 rounded-xl border transition-colors text-xs font-bold"><i data-lucide="type" class="w-5 h-5"></i> Text</button>
+                    <button onclick="switchTab('url')" id="tab-url" class="tab-inactive flex-shrink-0 flex-1 flex flex-col items-center justify-center gap-1 p-3 rounded-xl border transition-colors text-xs font-bold"><i data-lucide="link" class="w-5 h-5"></i> URL</button>
+                    <button onclick="switchTab('code')" id="tab-code" class="tab-inactive flex-shrink-0 flex-1 flex flex-col items-center justify-center gap-1 p-3 rounded-xl border transition-colors text-xs font-bold"><i data-lucide="code" class="w-5 h-5"></i> Code</button>
+                    <button onclick="switchTab('media')" id="tab-media" class="tab-inactive flex-shrink-0 flex-1 flex flex-col items-center justify-center gap-1 p-3 rounded-xl border transition-colors text-xs font-bold"><i data-lucide="file-up" class="w-5 h-5"></i> Media</button>
+                    <button onclick="switchTab('camera')" id="tab-camera" class="tab-inactive flex-shrink-0 flex-1 flex flex-col items-center justify-center gap-1 p-3 rounded-xl border transition-colors text-xs font-bold"><i data-lucide="camera" class="w-5 h-5"></i> Cam</button>
+                </div>
+
+                <div class="flex-1 p-4 flex flex-col gap-4 relative">
+                    <div id="view-text" class="flex flex-col gap-4 h-full">
+                        <textarea id="text-payload" placeholder="Paste notes or text..." class="w-full h-full bg-gray-950 border border-gray-800 rounded-xl p-4 text-white text-sm focus:outline-none focus:border-blue-500 transition resize-none custom-scrollbar"></textarea>
+                    </div>
+                    <div id="view-url" class="hidden flex-col gap-4 h-full">
+                        <input type="url" id="url-payload" placeholder="https://..." class="w-full bg-gray-950 border border-gray-800 rounded-xl p-4 text-white text-sm focus:outline-none focus:border-blue-500 transition" />
+                    </div>
+                    <div id="view-code" class="hidden flex-col gap-4 h-full">
+                        <textarea id="code-payload" placeholder="Paste raw code here..." class="w-full h-full bg-gray-950 border border-gray-800 rounded-xl p-4 text-emerald-400 font-mono text-sm focus:outline-none focus:border-blue-500 transition resize-none custom-scrollbar"></textarea>
+                    </div>
+                    <div id="view-media" class="hidden flex-col gap-4 h-full justify-center">
+                        <div class="flex-1 border-2 border-dashed border-gray-700 rounded-xl bg-gray-950 flex flex-col items-center justify-center p-6 text-center hover:border-blue-500 transition-colors relative">
+                            <input type="file" id="file-input" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="handleFileSelect('file-input', 'file-label')" />
+                            <i data-lucide="upload-cloud" class="w-8 h-8 text-gray-500 mb-2"></i>
+                            <p id="file-label" class="text-sm text-gray-300 font-bold">Tap or drag to select a file</p>
+                        </div>
+                    </div>
+                    <div id="view-camera" class="hidden flex-col gap-4 h-full justify-center">
+                        <div class="flex-1 border-2 border-dashed border-gray-700 rounded-xl bg-gray-950 flex flex-col items-center justify-center p-6 text-center hover:border-blue-500 transition-colors relative">
+                            <input type="file" accept="image/*,video/*" capture="environment" id="camera-input" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="handleFileSelect('camera-input', 'camera-label')" />
+                            <i data-lucide="aperture" class="w-8 h-8 text-blue-500 mb-2"></i>
+                            <p id="camera-label" class="text-sm text-gray-300 font-bold">Tap to open Camera</p>
+                        </div>
+                    </div>
+
+                    <div class="pt-4 border-t border-gray-800 mt-auto">
+                        <button onclick="activateShareSheet()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-xl transition shadow-lg shadow-blue-900/20 flex justify-center items-center gap-2">
+                            <span>Next: Select Recipient</span>
+                            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- RIGHT PANEL: TARGET SELECTION -->
+        <div class="md:col-span-5 flex flex-col h-[520px]">
+            <div id="target-empty" class="h-full flex flex-col items-center justify-center border-2 border-dashed border-gray-800 rounded-2xl bg-gray-900/50 text-gray-500 p-8 text-center gap-3">
+                <i data-lucide="send-to-back" class="w-8 h-8 text-gray-700"></i>
+                <div class="text-sm font-bold">Ready to send?</div>
+                <div class="text-xs text-gray-600">Compose your payload on the left, then click Next to choose a recipient.</div>
+            </div>
+
+            <div id="target-active" class="hidden flex-col gap-6 h-full bg-gray-900/90 border border-gray-800 p-6 rounded-2xl shadow-xl">
+                <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+                    <h2 class="text-sm font-bold uppercase tracking-wider text-gray-400 flex items-center gap-2"><i data-lucide="users" class="w-4 h-4"></i> Select Target</h2>
+                    <button onclick="cancelShareSheet()" class="text-gray-500 hover:text-white transition"><i data-lucide="x" class="w-4 h-4"></i></button>
+                </div>
+                <div class="flex-1 overflow-y-auto custom-scrollbar pr-2">
+                    <div id="device-grid" class="flex flex-col gap-3"></div>
+                    <div id="no-devices-msg" class="hidden p-4 text-center border border-dashed border-gray-800 rounded-xl text-gray-500 text-xs">No visible peers found.</div>
+                </div>
+                <div class="pt-4 border-t border-gray-800 flex flex-col gap-3">
+                    <label class="text-xs font-bold uppercase tracking-wider text-gray-400">Or enter PIN manually</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="target-code-input" placeholder="0000" maxlength="4" class="w-24 bg-gray-950 border border-gray-700 rounded-xl px-4 py-3 text-center font-mono text-sm text-white focus:outline-none focus:border-emerald-500 tracking-widest" />
+                        <button onclick="sendByCode()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 rounded-xl transition flex justify-center items-center gap-2 shadow-lg shadow-emerald-900/20">
+                            <i data-lucide="zap" class="w-4 h-4"></i> Send
+                        </button>
+                    </div>
                 </div>
             </div>
-
-            <div class="flex items-center gap-3 w-full sm:w-auto justify-end">
-                <div class="text-right">
-                    <div class="text-[10px] text-gray-400 font-medium uppercase tracking-wider">Your 4-Digit Code</div>
-                    <div id="my-code-display" class="font-mono text-2xl font-black text-emerald-400 tracking-widest">----</div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Message Composer -->
-        <section class="bg-gray-900/90 border border-gray-800 p-5 rounded-2xl flex flex-col gap-3 shadow-xl">
-            <div class="flex justify-between items-center">
-                <label for="text-payload" class="text-xs font-bold uppercase tracking-wider text-gray-400">Content to Send</label>
-                <button onclick="clearInput()" class="text-xs text-gray-500 hover:text-gray-300">Clear</button>
-            </div>
-            <textarea id="text-payload" rows="3" placeholder="Paste links, text, code, or notes here..." class="w-full bg-gray-950 border border-gray-800 rounded-xl p-4 text-white text-sm focus:outline-none focus:border-blue-500 transition resize-none"></textarea>
-            
-            <div class="flex flex-col sm:flex-row gap-2 pt-2 border-t border-gray-800/80">
-                <input type="text" id="target-code-input" placeholder="Enter 4-digit code" maxlength="4" class="sm:w-44 bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-center font-mono text-sm text-white focus:outline-none focus:border-blue-500 tracking-widest uppercase" />
-                <button onclick="sendByCode()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-4 rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/20">
-                    <span>Send via Code</span>
-                </button>
-            </div>
-        </section>
-
-        <!-- Active Devices On Network -->
-        <section class="flex-1 flex flex-col">
-            <div class="flex items-center justify-between mb-3">
-                <h2 class="text-sm font-bold uppercase tracking-wider text-gray-400">Active Devices on LAN</h2>
-                <span id="device-count" class="text-xs bg-gray-800 border border-gray-700 px-2 py-0.5 rounded-full text-gray-400">0 online</span>
-            </div>
-
-            <div id="device-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 content-start">
-                <!-- Dynamic cards render here -->
-            </div>
-
-            <div id="no-devices-msg" class="p-8 text-center border border-dashed border-gray-800 rounded-2xl text-gray-500 text-sm">
-                No other devices detected on this network yet.<br>
-                <span class="text-xs text-gray-600">Scan the QR code to connect your phone or another laptop!</span>
-            </div>
-        </section>
-
+        </div>
     </main>
 
-    <!-- Footer -->
-    <footer class="w-full max-w-2xl text-center text-xs text-gray-600 py-4 mt-6">
-        Direct Local Area Network Transfer &bull; Sub-millisecond latency
-    </footer>
+    <!-- TIME MACHINE MODAL -->
+    <div id="tm-modal" class="modal-backdrop fixed inset-0 z-[90] hidden flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[80vh] overflow-hidden">
+            
+            <div class="flex items-center justify-between border-b border-gray-800 p-5 bg-gray-950">
+                <div class="flex items-center gap-3 text-indigo-400">
+                    <i data-lucide="clock" class="w-5 h-5"></i>
+                    <h2 class="font-bold text-lg text-white">Time Machine</h2>
+                </div>
+                <button onclick="closeTimeMachine()" class="text-gray-500 hover:text-white transition"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+
+            <!-- Auth View -->
+            <div id="tm-auth-view" class="p-8 flex flex-col items-center justify-center gap-4">
+                <i data-lucide="lock" class="w-12 h-12 text-gray-600 mb-2"></i>
+                <h3 class="text-white font-bold">Authentication Required</h3>
+                <p class="text-xs text-gray-400 text-center mb-2">Enter the master password from config.json<br>(Default is 'admin')</p>
+                <div class="flex w-full max-w-xs gap-2">
+                    <input type="password" id="tm-password" placeholder="Password" class="flex-1 bg-gray-950 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-indigo-500" />
+                    <button onclick="authenticateTimeMachine()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-5 rounded-xl transition">
+                        Unlock
+                    </button>
+                </div>
+            </div>
+
+            <!-- File List View -->
+            <div id="tm-file-view" class="hidden flex-col h-full bg-gray-900">
+                <div class="p-4 border-b border-gray-800 bg-gray-900/50 flex justify-between items-center text-xs font-bold text-gray-500 uppercase tracking-wider">
+                    <span>File Name</span>
+                    <span>Size / Action</span>
+                </div>
+                <div id="tm-file-list" class="flex-1 overflow-y-auto custom-scrollbar p-2 flex flex-col gap-2">
+                    <!-- Files generated here -->
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- OFFER INCOMING MODAL -->
+    <div id="offer-modal" class="modal-backdrop fixed inset-0 z-[80] hidden flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl flex flex-col gap-5 items-center text-center">
+            <div class="w-12 h-12 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center shadow-lg">
+                <i data-lucide="bell-ring" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <h3 class="font-bold text-white text-lg" id="offer-title">Incoming Transfer</h3>
+                <p class="text-sm text-gray-400 mt-2" id="offer-desc">Someone wants to send you a file.</p>
+            </div>
+            <div class="bg-gray-950 border border-gray-800 p-3 rounded-xl w-full text-xs text-gray-300 font-mono break-all" id="offer-meta"></div>
+            
+            <div class="flex gap-3 w-full mt-2">
+                <button onclick="respondToOffer(false)" class="flex-1 bg-red-600/20 border border-red-500/50 hover:bg-red-600 text-red-400 hover:text-white font-bold py-3 rounded-xl transition text-sm">Decline</button>
+                <button onclick="respondToOffer(true)" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition text-sm shadow-lg shadow-emerald-900/20">Accept</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PROGRESS TRANSFER MODAL -->
+    <div id="transfer-modal" class="modal-backdrop fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl flex flex-col gap-4 text-center items-center">
+            <div id="transfer-spinner" class="loader mb-2"></div>
+            <i id="transfer-icon" data-lucide="check-circle" class="w-8 h-8 text-emerald-400 hidden mb-2"></i>
+            <h3 class="font-bold text-white text-sm" id="transfer-status-title">Processing...</h3>
+            <p class="text-xs text-gray-400" id="transfer-status-sub">Please wait.</p>
+            <div class="w-full bg-gray-800 rounded-full h-2 mt-2 overflow-hidden" id="progress-container">
+                <div id="transfer-progress-bar" class="bg-blue-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+            <div id="transfer-save-zone" class="w-full hidden mt-4 pt-4 border-t border-gray-800">
+                <a id="transfer-save-btn" href="#" download class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition flex justify-center items-center gap-2 text-sm">
+                    <i data-lucide="download-cloud" class="w-4 h-4"></i> Save File
+                </a>
+                <button onclick="closeTransferModal()" class="w-full mt-2 bg-gray-800 hover:bg-gray-700 font-bold py-2 rounded-xl text-gray-300 transition text-sm">Dismiss</button>
+            </div>
+        </div>
+    </div>
 
     <!-- INCOMING DATA MODAL -->
-    <div id="incoming-modal" class="modal-backdrop fixed inset-0 z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md shadow-2xl flex flex-col gap-4">
-            <div class="flex items-center justify-between border-b border-gray-800 pb-3">
-                <div class="flex items-center gap-2">
-                    <span class="text-xl">📥</span>
+    <div id="incoming-modal" class="modal-backdrop fixed inset-0 z-[60] hidden flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-2xl shadow-2xl flex flex-col gap-4">
+            <div class="flex items-center justify-between border-b border-gray-800 pb-4">
+                <div class="flex items-center gap-3">
+                    <div id="modal-icon-container" class="w-10 h-10 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center">
+                        <i data-lucide="bell" id="modal-header-icon"></i>
+                    </div>
                     <div>
                         <h3 class="font-bold text-white text-sm" id="modal-sender-name">Unknown Device</h3>
                         <p class="text-[10px] text-gray-400" id="modal-time"></p>
                     </div>
                 </div>
-                <span class="text-xs font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded">Received</span>
+                <span id="modal-badge" class="text-xs font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-3 py-1 rounded-lg">Incoming</span>
             </div>
-
-            <div id="modal-content" class="bg-gray-950 border border-gray-800 p-4 rounded-xl text-gray-200 text-sm max-h-60 overflow-y-auto whitespace-pre-wrap break-words font-mono select-all">
-            </div>
-
-            <div class="flex gap-2">
-                <button onclick="copyModalContent()" id="copy-btn" class="flex-1 bg-blue-600 hover:bg-blue-500 font-bold py-2.5 rounded-xl transition text-sm">
-                    Copy to Clipboard
-                </button>
-                <button onclick="closeModal()" class="bg-gray-800 hover:bg-gray-700 font-bold px-4 py-2.5 rounded-xl text-gray-300 transition text-sm">
-                    Close
-                </button>
-            </div>
+            <div id="modal-content" class="bg-gray-950 border border-gray-800 p-4 rounded-xl text-gray-200 text-sm max-h-[60vh] overflow-y-auto whitespace-pre-wrap break-words font-mono select-all custom-scrollbar"></div>
+            <div class="flex gap-3 pt-2" id="modal-actions"></div>
         </div>
     </div>
 
     <!-- LAN QR CODE MODAL -->
-    <div id="qr-modal" class="modal-backdrop fixed inset-0 z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-xs shadow-2xl flex flex-col items-center gap-4">
-            <h3 class="font-bold text-white text-center">Scan to Open on Mobile</h3>
-            
-            <div id="lan-qr" class="bg-white p-3 rounded-xl shadow-inner"></div>
-            
+    <div id="qr-modal" class="modal-backdrop fixed inset-0 z-[70] hidden flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl flex flex-col items-center gap-5">
+            <div class="text-center">
+                <h3 class="font-bold text-white text-lg">Scan to Connect</h3>
+                <p class="text-xs text-gray-400 mt-1">Point your phone camera here to join the local hub.</p>
+            </div>
+            <div id="lan-qr" class="bg-white p-4 rounded-xl shadow-inner"></div>
             <p id="lan-url-display" class="font-mono text-xs text-blue-400 break-all text-center"></p>
-
-            <button onclick="toggleQRModal()" class="w-full bg-gray-800 hover:bg-gray-700 font-bold py-2 rounded-xl text-gray-300 transition text-sm">
-                Dismiss
-            </button>
+            <button onclick="toggleQRModal()" class="w-full bg-gray-800 hover:bg-gray-700 font-bold py-3 rounded-xl text-gray-300 transition text-sm">Close</button>
         </div>
     </div>
 
-    <!-- JAVASCRIPT LOGIC -->
     <script>
+        // --- Alerts & Notifications ---
+        function triggerAlert(title, body) {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                function playTone(freq, time) {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.frequency.value = freq;
+                    gain.gain.setValueAtTime(0.1, time);
+                    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.4);
+                    osc.start(time);
+                    osc.stop(time + 0.4);
+                }
+                playTone(659.25, ctx.currentTime);
+                playTone(880.00, ctx.currentTime + 0.15); 
+            } catch(e) { console.warn("Audio Context blocked."); }
+
+            if (Notification.permission === 'granted') {
+                new Notification(title, { body: body });
+            }
+        }
+
+        document.body.addEventListener('click', () => {
+            if (Notification.permission === 'default') Notification.requestPermission();
+        }, { once: true });
+
+
+        // --- Core Application State ---
         let ws = null;
         let myId = localStorage.getItem('localdrop_id') || 'peer_' + Math.random().toString(36).substring(2, 9);
         localStorage.setItem('localdrop_id', myId);
 
-        // Auto-detect OS/device type for an intuitive default name
+        let isVisible = localStorage.getItem('localdrop_visible') !== 'false';
+        let activePeers = [];
+        let lanUrl = window.location.origin;
+        let currentTab = 'text';
+        let selectedFile = null;
+        let pendingTransferState = null; 
+        let pendingOfferSenderId = null;
+        let timeMachinePassword = "";
+
         function detectDeviceName() {
             const ua = navigator.userAgent;
-            if (/iPad|iPhone|iPod/.test(ua)) return 'Apple iPhone';
+            if (/iPad|iPhone|iPod/.test(ua)) return 'iPhone / iPad';
             if (/Macintosh/.test(ua)) return 'MacBook';
             if (/Windows/.test(ua)) return 'Windows PC';
-            if (/Android/.test(ua)) return 'Android Phone';
-            if (/Linux/.test(ua)) return 'Linux Box';
-            return 'Workstation';
+            if (/Android/.test(ua)) return 'Android Device';
+            return 'My Device';
         }
 
         let myName = localStorage.getItem('localdrop_name') || detectDeviceName();
         document.getElementById('my-name-input').value = myName;
 
-        let activePeers = [];
-        let lanUrl = window.location.origin;
+        const tabs = ['text', 'url', 'code', 'media', 'camera'];
 
-        // --- WebSocket Setup ---
+        function switchTab(tab) {
+            currentTab = tab;
+            selectedFile = null; 
+            document.getElementById('file-label').innerHTML = `Tap or drag to select a file`;
+            document.getElementById('camera-label').innerHTML = `Tap to open Camera`;
+            document.getElementById('file-input').value = '';
+            document.getElementById('camera-input').value = '';
+
+            tabs.forEach(t => {
+                const isMatch = t === tab;
+                document.getElementById(`view-${t}`).classList.toggle('hidden', !isMatch);
+                document.getElementById(`view-${t}`).classList.toggle('flex', isMatch);
+                
+                const btn = document.getElementById(`tab-${t}`);
+                if (isMatch) btn.classList.replace('tab-inactive', 'tab-active');
+                else btn.classList.replace('tab-active', 'tab-inactive');
+            });
+            cancelShareSheet(); 
+        }
+
+        function handleFileSelect(inputId, labelId) {
+            const input = document.getElementById(inputId);
+            if (input.files.length > 0) {
+                selectedFile = input.files[0];
+                document.getElementById(labelId).innerHTML = `<span class="text-blue-400">${selectedFile.name}</span><br><span class="text-xs text-gray-500">${(selectedFile.size / 1024 / 1024).toFixed(2)} MB</span>`;
+            }
+        }
+
+        function getPayloadData() {
+            if (currentTab === 'text') return { type: 'text', content: document.getElementById('text-payload').value.trim() };
+            if (currentTab === 'url') return { type: 'url', content: document.getElementById('url-payload').value.trim() };
+            if (currentTab === 'code') return { type: 'code', content: document.getElementById('code-payload').value.trim() };
+            return null;
+        }
+
+        // --- Core WebSockets ---
         function initWebSocket() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            let wsHost = window.location.host;
+            let protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            if (!wsHost || window.location.protocol === 'file:') { wsHost = 'localhost:8000'; protocol = 'ws:'; }
 
-            ws = new WebSocket(wsUrl);
+            ws = new WebSocket(`${protocol}//${wsHost}/ws`);
 
             ws.onopen = () => {
-                updateConnectionStatus('Online', 'text-emerald-400', 'border-emerald-800/50');
-                ws.send(JSON.stringify({
-                    type: 'register',
-                    id: myId,
-                    name: myName
-                }));
+                updateConnectionStatus(isVisible ? 'Online' : 'Online (Hidden)', isVisible ? 'text-emerald-400' : 'text-gray-400', isVisible ? 'border-emerald-800/50' : 'border-gray-700', isVisible ? 'wifi' : 'eye-off');
+                ws.send(JSON.stringify({ type: 'register', id: myId, name: myName, visible: isVisible }));
             };
 
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
-
+                
                 if (data.type === 'registered') {
                     document.getElementById('my-code-display').innerText = data.code;
                     lanUrl = data.local_url;
                     renderQR(lanUrl);
+                
                 } else if (data.type === 'peer_list') {
                     activePeers = data.peers.filter(p => p.id !== myId);
-                    renderPeers();
-                } else if (data.type === 'incoming_data') {
-                    showIncomingModal(data.sender_name, data.payload);
-                } else if (data.type === 'send_ack') {
-                    if (data.success) {
-                        flashSuccess("Sent successfully!");
+                    if (!document.getElementById('target-active').classList.contains('hidden')) renderPeers();
+                
+                } else if (data.type === 'incoming_offer') {
+                    pendingOfferSenderId = data.sender_id;
+                    document.getElementById('offer-desc').innerHTML = `<span class="text-white font-bold">${escapeHtml(data.sender_name)}</span> wants to send you a <b>${data.payload_type.toUpperCase()}</b>.`;
+                    document.getElementById('offer-meta').innerText = data.meta || 'No preview available';
+                    document.getElementById('offer-modal').classList.remove('hidden');
+                    triggerAlert("Incoming Share", `${data.sender_name} wants to send you a ${data.payload_type}`);
+
+                } else if (data.type === 'offer_error') {
+                    alert(data.error);
+                    closeTransferModal();
+
+                } else if (data.type === 'transfer_response') {
+                    if (data.accepted) {
+                        if (pendingTransferState.type === 'media') {
+                            startHTTPUpload(data.target_id);
+                        } else {
+                            showTransferModal("Sending...", "Uploading text payload to server.", true, 100);
+                            ws.send(JSON.stringify({ 
+                                type: 'send_actual_data', 
+                                target_id: data.target_id, 
+                                payload: pendingTransferState.payload 
+                            }));
+                        }
                     } else {
-                        alert(data.error || "Failed to send to target device.");
+                        showTransferModal("Declined", `${data.responder_name} declined your transfer.`, false, 0);
+                        setTimeout(closeTransferModal, 2500);
                     }
+                    pendingTransferState = null;
+
+                } else if (data.type === 'incoming_data') {
+                    handleIncomingPayload(data.sender_name, data.payload);
+
+                } else if (data.type === 'send_ack') {
+                    if (data.success) { 
+                        flashSuccess(); 
+                        closeTransferModal();
+                        cancelShareSheet(); 
+                    } else { 
+                        alert(data.error || "Failed to send."); 
+                        closeTransferModal();
+                    }
+                
+                } else if (data.type === 'file_ready') {
+                    startHTTPDownload(data.sender_name, data.file_id, data.filename, data.size);
+                
+                } else if (data.type === 'file_transfer_complete') {
+                    showTransferModal(`Sent to ${data.receiver_name}!`, "Transfer complete.", false, 100);
+                    document.getElementById('progress-container').classList.add('hidden');
+                    setTimeout(closeTransferModal, 2000);
+                    cancelShareSheet();
                 }
             };
 
             ws.onclose = () => {
-                updateConnectionStatus('Disconnected', 'text-red-400', 'border-red-800/50');
+                updateConnectionStatus('Offline', 'text-red-400', 'border-red-800/50', 'wifi-off');
                 setTimeout(initWebSocket, 2000);
             };
+        }
 
-            ws.onerror = () => {
-                ws.close();
+        // --- Sending Flow ---
+        function activateShareSheet() {
+            if (currentTab === 'text' && !document.getElementById('text-payload').value.trim()) return alert("Enter some text first.");
+            if (currentTab === 'url' && !document.getElementById('url-payload').value.trim()) return alert("Enter a URL first.");
+            if (currentTab === 'code' && !document.getElementById('code-payload').value.trim()) return alert("Paste some code first.");
+            if ((currentTab === 'media' || currentTab === 'camera') && !selectedFile) return alert("Select or capture a file first.");
+
+            document.getElementById('target-empty').classList.add('hidden');
+            document.getElementById('target-active').classList.remove('hidden');
+            document.getElementById('target-active').classList.add('flex');
+            renderPeers();
+        }
+
+        function cancelShareSheet() {
+            document.getElementById('target-empty').classList.remove('hidden');
+            document.getElementById('target-active').classList.add('hidden');
+            document.getElementById('target-active').classList.remove('flex');
+        }
+
+        function sendDirect(targetId) { initiateOffer(targetId, false); }
+
+        function sendByCode() {
+            const code = document.getElementById('target-code-input').value.trim();
+            if (!code || code.length !== 4) return alert("Enter a valid 4-digit PIN.");
+            initiateOffer(code, true);
+        }
+
+        function initiateOffer(targetIdOrCode, isCode) {
+            const isMedia = (currentTab === 'media' || currentTab === 'camera');
+            const metaStr = isMedia ? selectedFile.name : (getPayloadData().content.substring(0, 50) + '...');
+            
+            pendingTransferState = {
+                type: isMedia ? 'media' : 'text_based',
+                payload: isMedia ? null : getPayloadData()
             };
+
+            showTransferModal("Waiting for response...", "Recipient must accept the transfer.", true, 0);
+
+            const msgType = isCode ? 'offer_transfer_by_code' : 'offer_transfer';
+            const payload = { type: msgType, payload_type: currentTab, meta: metaStr };
+            if (isCode) payload.target_code = targetIdOrCode;
+            else payload.target_id = targetIdOrCode;
+            
+            ws.send(JSON.stringify(payload));
         }
 
-        function updateConnectionStatus(text, textColor, borderColor) {
-            const el = document.getElementById('connection-status');
-            el.innerText = text;
-            el.className = `text-xs font-mono px-3 py-1.5 rounded-lg bg-gray-900 border ${borderColor} ${textColor}`;
+        // --- Receiving Flow ---
+        function respondToOffer(accepted) {
+            document.getElementById('offer-modal').classList.add('hidden');
+            ws.send(JSON.stringify({ type: 'offer_response', target_id: pendingOfferSenderId, accepted: accepted }));
+            if (accepted) showTransferModal("Connecting...", "Waiting for sender to push data.", true, 0);
         }
 
-        // --- Name Change Sync ---
-        document.getElementById('my-name-input').addEventListener('change', (e) => {
-            myName = e.target.value.trim() || 'My Device';
-            localStorage.setItem('localdrop_name', myName);
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                    type: 'update_name',
-                    name: myName
-                }));
-            }
-        });
+        function startHTTPUpload(targetId) {
+            if (!selectedFile) return;
+            showTransferModal("Uploading to server...", "Saving permanently to /uploads", true, 0);
+            
+            const formData = new FormData();
+            formData.append("file", selectedFile);
+            
+            const xhr = new XMLHttpRequest();
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) updateTransferProgress(Math.round((e.loaded / e.total) * 100));
+            };
+            xhr.onload = () => {
+                if (xhr.status === 200) {
+                    const resp = JSON.parse(xhr.responseText);
+                    showTransferModal("Waiting for receiver to download...", "Server has the file", true, 100);
+                    ws.send(JSON.stringify({ type: 'file_uploaded', target_id: targetId, file_id: resp.file_id, filename: resp.filename, size: resp.size }));
+                } else {
+                    showTransferModal("Upload Failed", "Something went wrong.", false, 0);
+                    setTimeout(closeTransferModal, 2000);
+                }
+            };
+            xhr.open("POST", "/upload");
+            xhr.send(formData);
+        }
 
-        // --- Render Active Devices ---
-        function renderPeers() {
-            const grid = document.getElementById('device-grid');
-            const noDev = document.getElementById('no-devices-msg');
-            const count = document.getElementById('device-count');
+        async function startHTTPDownload(senderName, fileId, filename, size) {
+            const MAX_BLOB_SIZE = 500 * 1024 * 1024;
+            if (size && size > MAX_BLOB_SIZE) {
+                showTransferModal("Massive file detected!", "Handing off to native manager...", true, 100);
+                document.getElementById('progress-container').classList.add('hidden');
+                
+                const link = document.createElement('a');
+                link.href = `/download/${fileId}?filename=${encodeURIComponent(filename)}`;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
 
-            count.innerText = `${activePeers.length} online`;
-            grid.innerHTML = '';
-
-            if (activePeers.length === 0) {
-                noDev.classList.remove('hidden');
+                ws.send(JSON.stringify({ type: 'file_downloaded', target_id: activePeers.find(p => p.name === senderName)?.id || senderName }));
+                setTimeout(closeTransferModal, 3500);
                 return;
             }
 
+            showTransferModal("Downloading from server...", `Receiving from ${senderName}`, true, 0);
+            document.getElementById('progress-container').classList.remove('hidden');
+
+            try {
+                const response = await fetch(`/download/${fileId}?filename=${encodeURIComponent(filename)}`);
+                const contentLength = response.headers.get('content-length');
+                
+                if (!contentLength) {
+                    const blob = await response.blob();
+                    finishDownload(blob, filename, senderName);
+                    return;
+                }
+
+                const total = parseInt(contentLength, 10);
+                let loaded = 0;
+                const reader = response.body.getReader();
+                const chunks = [];
+                
+                while(true) {
+                    const {done, value} = await reader.read();
+                    if (done) break;
+                    chunks.push(value);
+                    loaded += value.length;
+                    updateTransferProgress(Math.round((loaded / total) * 100));
+                }
+                finishDownload(new Blob(chunks), filename, senderName);
+            } catch (err) {
+                showTransferModal("Download Failed", err.message, false, 0);
+                setTimeout(closeTransferModal, 2000);
+            }
+        }
+
+        function finishDownload(blob, filename, senderName) {
+            showTransferModal("Download Complete!", "Ready to save", false, 100);
+            const saveBtn = document.getElementById('transfer-save-btn');
+            saveBtn.href = URL.createObjectURL(blob);
+            saveBtn.download = filename;
+            document.getElementById('transfer-save-zone').classList.remove('hidden');
+            ws.send(JSON.stringify({ type: 'file_downloaded', target_id: activePeers.find(p => p.name === senderName)?.id || senderName }));
+        }
+
+        function handleIncomingPayload(senderName, payloadObj) {
+            closeTransferModal(); 
+            document.getElementById('modal-sender-name').innerText = senderName;
+            document.getElementById('modal-time').innerText = new Date().toLocaleTimeString();
+            
+            const contentDiv = document.getElementById('modal-content');
+            const actionsDiv = document.getElementById('modal-actions');
+            const iconEl = document.getElementById('modal-header-icon');
+            const badgeEl = document.getElementById('modal-badge');
+            actionsDiv.innerHTML = ''; 
+
+            const addCloseBtn = () => {
+                const btn = document.createElement('button');
+                btn.onclick = () => document.getElementById('incoming-modal').classList.add('hidden');
+                btn.className = "bg-gray-800 hover:bg-gray-700 font-bold px-5 py-3 rounded-xl text-gray-300 transition text-sm flex justify-center items-center gap-2";
+                btn.innerHTML = '<i data-lucide="x" class="w-4 h-4"></i>';
+                actionsDiv.appendChild(btn);
+            };
+
+            if (payloadObj.type === 'text') {
+                iconEl.setAttribute('data-lucide', 'align-left');
+                badgeEl.innerText = 'New Text';
+                contentDiv.innerHTML = escapeHtml(payloadObj.content);
+                
+                const copyBtn = document.createElement('button');
+                copyBtn.onclick = () => copyTextAndFlash(payloadObj.content, copyBtn);
+                copyBtn.className = "flex-1 bg-blue-600 hover:bg-blue-500 font-bold py-3 rounded-xl transition text-sm flex justify-center items-center gap-2";
+                copyBtn.innerHTML = '<i data-lucide="copy" class="w-4 h-4"></i> Copy Text';
+                actionsDiv.appendChild(copyBtn);
+                addCloseBtn();
+
+            } else if (payloadObj.type === 'url') {
+                iconEl.setAttribute('data-lucide', 'link');
+                badgeEl.innerText = 'Shared Link';
+                contentDiv.innerHTML = `<a href="${escapeHtml(payloadObj.content)}" target="_blank" class="text-blue-400 hover:underline break-all">${escapeHtml(payloadObj.content)}</a>`;
+                
+                const openBtn = document.createElement('button');
+                openBtn.onclick = () => window.open(payloadObj.content, '_blank');
+                openBtn.className = "flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition text-sm flex justify-center items-center gap-2";
+                openBtn.innerHTML = '<i data-lucide="external-link" class="w-4 h-4"></i> Open URL';
+                actionsDiv.appendChild(openBtn);
+                addCloseBtn();
+
+            } else if (payloadObj.type === 'code') {
+                iconEl.setAttribute('data-lucide', 'terminal');
+                badgeEl.innerText = 'Code Snippet';
+                
+                const codeEl = document.createElement('code');
+                codeEl.className = 'hljs !bg-transparent !p-0';
+                codeEl.textContent = payloadObj.content;
+                hljs.highlightElement(codeEl);
+                contentDiv.innerHTML = `<pre class="bg-[#0d1117] p-4 rounded-xl border border-gray-800 text-xs overflow-x-auto custom-scrollbar">${codeEl.outerHTML}</pre>`;
+
+                const copyBtn = document.createElement('button');
+                copyBtn.onclick = () => copyTextAndFlash(payloadObj.content, copyBtn);
+                copyBtn.className = "flex-1 bg-blue-600 hover:bg-blue-500 font-bold py-3 rounded-xl transition text-sm flex justify-center items-center gap-2";
+                copyBtn.innerHTML = '<i data-lucide="copy" class="w-4 h-4"></i> Copy Code';
+                actionsDiv.appendChild(copyBtn);
+
+                const dlBtn = document.createElement('button');
+                dlBtn.onclick = () => {
+                    const blob = new Blob([payloadObj.content], { type: 'text/plain' });
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = 'snippet.txt';
+                    a.click();
+                };
+                dlBtn.className = "flex-1 bg-emerald-600 hover:bg-emerald-500 font-bold py-3 rounded-xl transition text-sm flex justify-center items-center gap-2 text-white";
+                dlBtn.innerHTML = '<i data-lucide="download" class="w-4 h-4"></i> Download .txt';
+                actionsDiv.appendChild(dlBtn);
+                addCloseBtn();
+            }
+
+            document.getElementById('incoming-modal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        // --- Time Machine Logic ---
+        function openTimeMachine() {
+            document.getElementById('tm-modal').classList.remove('hidden');
+            document.getElementById('tm-auth-view').classList.remove('hidden');
+            document.getElementById('tm-auth-view').classList.add('flex');
+            document.getElementById('tm-file-view').classList.add('hidden');
+            document.getElementById('tm-file-view').classList.remove('flex');
+            document.getElementById('tm-password').value = '';
+        }
+
+        function closeTimeMachine() { document.getElementById('tm-modal').classList.add('hidden'); }
+
+        async function authenticateTimeMachine() {
+            const pwd = document.getElementById('tm-password').value;
+            if (!pwd) return alert("Enter a password");
+
+            try {
+                const res = await fetch(`/api/timemachine?password=${encodeURIComponent(pwd)}`);
+                if (!res.ok) {
+                    alert("Invalid password.");
+                    return;
+                }
+                const data = await res.json();
+                timeMachinePassword = pwd; 
+                renderTimeMachineFiles(data.files);
+                
+                document.getElementById('tm-auth-view').classList.add('hidden');
+                document.getElementById('tm-auth-view').classList.remove('flex');
+                document.getElementById('tm-file-view').classList.remove('hidden');
+                document.getElementById('tm-file-view').classList.add('flex');
+
+            } catch (e) {
+                alert("Error connecting to server.");
+            }
+        }
+
+        function formatBytes(bytes, decimals = 2) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024, dm = decimals < 0 ? 0 : decimals, sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        }
+
+        function renderTimeMachineFiles(files) {
+            const container = document.getElementById('tm-file-list');
+            container.innerHTML = '';
+            
+            if (files.length === 0) {
+                container.innerHTML = '<div class="p-8 text-center text-gray-500 text-sm">No files in the uploads folder yet.</div>';
+                return;
+            }
+
+            files.forEach(f => {
+                const dateStr = new Date(f.time * 1000).toLocaleString();
+                const div = document.createElement('div');
+                div.className = "flex items-center justify-between bg-gray-950 p-4 rounded-xl border border-gray-800 hover:border-gray-700 transition";
+                div.innerHTML = `
+                    <div class="flex-1 min-w-0 pr-4">
+                        <div class="text-sm font-bold text-gray-200 truncate" title="${f.name}">${f.name}</div>
+                        <div class="text-xs text-gray-500 mt-1">${dateStr}</div>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <div class="text-xs font-mono text-gray-400">${formatBytes(f.size)}</div>
+                        <a href="/download/${f.name}?filename=${f.name}" download class="bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white p-2 rounded-lg transition" title="Download">
+                            <i data-lucide="download" class="w-4 h-4"></i>
+                        </a>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+            lucide.createIcons();
+        }
+
+        // --- View & Modals ---
+        function showTransferModal(title, sub, showSpinner, progress) {
+            document.getElementById('transfer-status-title').innerText = title;
+            document.getElementById('transfer-status-sub').innerText = sub;
+            document.getElementById('transfer-spinner').classList.toggle('hidden', !showSpinner);
+            document.getElementById('transfer-icon').classList.toggle('hidden', showSpinner);
+            document.getElementById('transfer-save-zone').classList.add('hidden');
+            updateTransferProgress(progress);
+            document.getElementById('transfer-modal').classList.remove('hidden');
+        }
+
+        function updateTransferProgress(percent) { document.getElementById('transfer-progress-bar').style.width = `${percent}%`; }
+        function closeTransferModal() { document.getElementById('transfer-modal').classList.add('hidden'); }
+
+        function toggleVisibility() {
+            isVisible = !isVisible;
+            localStorage.setItem('localdrop_visible', isVisible);
+            const btn = document.getElementById('vis-btn');
+            const icon = document.getElementById('vis-icon');
+            if (isVisible) {
+                icon.setAttribute('data-lucide', 'eye');
+                btn.classList.replace('text-blue-400', 'text-gray-400');
+                updateConnectionStatus('Online', 'text-emerald-400', 'border-emerald-800/50', 'wifi');
+            } else {
+                icon.setAttribute('data-lucide', 'eye-off');
+                btn.classList.replace('text-gray-400', 'text-blue-400');
+                updateConnectionStatus('Online (Hidden)', 'text-gray-400', 'border-gray-700', 'eye-off');
+            }
+            lucide.createIcons();
+            if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'update_state', name: myName, visible: isVisible }));
+        }
+
+        document.getElementById('my-name-input').addEventListener('change', (e) => {
+            myName = e.target.value.trim() || 'My Device';
+            localStorage.setItem('localdrop_name', myName);
+            if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'update_state', name: myName, visible: isVisible }));
+        });
+
+        function updateConnectionStatus(text, textColor, borderColor, iconName) {
+            const el = document.getElementById('connection-status');
+            document.getElementById('conn-text').innerText = text;
+            document.getElementById('conn-icon').setAttribute('data-lucide', iconName);
+            el.className = `flex items-center gap-2 text-xs font-mono px-4 py-2 rounded-lg bg-gray-900 border ${borderColor} ${textColor} transition-colors`;
+            lucide.createIcons();
+        }
+
+        function renderPeers() {
+            const grid = document.getElementById('device-grid');
+            const noDev = document.getElementById('no-devices-msg');
+            grid.innerHTML = '';
+
+            if (activePeers.length === 0) { noDev.classList.remove('hidden'); return; }
             noDev.classList.add('hidden');
 
             activePeers.forEach(peer => {
                 const card = document.createElement('div');
-                card.className = "device-card bg-gray-900 border border-gray-800 hover:border-blue-500/50 p-4 rounded-xl flex items-center justify-between transition cursor-pointer group shadow-lg";
+                card.className = "device-card bg-gray-950 border border-gray-800 p-4 rounded-xl flex items-center justify-between cursor-pointer shadow-md";
                 card.onclick = () => sendDirect(peer.id);
-                
                 card.innerHTML = `
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-lg bg-gray-800 flex items-center justify-center text-lg group-hover:bg-blue-600/20 group-hover:text-blue-400 transition">
-                            📱
-                        </div>
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-xl bg-gray-800 flex items-center justify-center text-gray-400 group-hover:text-blue-400 transition-colors"><i data-lucide="smartphone"></i></div>
                         <div>
                             <div class="font-bold text-sm text-white">${escapeHtml(peer.name)}</div>
-                            <div class="text-[10px] text-gray-500 font-mono tracking-widest">CODE: ${peer.code}</div>
+                            <div class="text-[10px] text-gray-500 font-mono tracking-widest mt-0.5">PIN: ${peer.code}</div>
                         </div>
                     </div>
-                    <button class="bg-blue-600 group-hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition shadow">
-                        Send &rarr;
-                    </button>
-                `;
+                    <button class="bg-gray-800 text-gray-300 text-xs font-bold w-8 h-8 rounded-lg flex items-center justify-center"><i data-lucide="arrow-right" class="w-4 h-4"></i></button>`;
                 grid.appendChild(card);
             });
+            lucide.createIcons();
         }
 
-        // --- Sending Actions ---
-        function sendDirect(targetId) {
-            const text = document.getElementById('text-payload').value.trim();
-            if (!text) {
-                alert("Please enter some text or a link to send first!");
-                document.getElementById('text-payload').focus();
-                return;
-            }
-
-            ws.send(JSON.stringify({
-                type: 'send_direct',
-                target_id: targetId,
-                payload: text
-            }));
-        }
-
-        function sendByCode() {
-            const code = document.getElementById('target-code-input').value.trim();
-            const text = document.getElementById('text-payload').value.trim();
-
-            if (!code || code.length !== 4) {
-                alert("Please enter a valid 4-digit code.");
-                return;
-            }
-            if (!text) {
-                alert("Please enter some text to send.");
-                return;
-            }
-
-            ws.send(JSON.stringify({
-                type: 'send_by_code',
-                target_code: code,
-                payload: text
-            }));
-        }
-
-        function clearInput() {
-            document.getElementById('text-payload').value = '';
-        }
-
-        function flashSuccess(msg) {
-            const textarea = document.getElementById('text-payload');
-            const originalBg = textarea.style.borderColor;
-            textarea.style.borderColor = '#10b981';
-            setTimeout(() => {
-                textarea.style.borderColor = originalBg;
-            }, 1000);
-        }
-
-        // --- Modal Display & Clipboard ---
-        function showIncomingModal(senderName, payload) {
-            document.getElementById('modal-sender-name').innerText = senderName;
-            document.getElementById('modal-time').innerText = new Date().toLocaleTimeString();
-            document.getElementById('modal-content').innerText = payload;
-            document.getElementById('incoming-modal').classList.remove('hidden');
-        }
-
-        function closeModal() {
-            document.getElementById('incoming-modal').classList.add('hidden');
-        }
-
-        function copyModalContent() {
-            const text = document.getElementById('modal-content').innerText;
-            navigator.clipboard.writeText(text).then(() => {
-                const btn = document.getElementById('copy-btn');
-                btn.innerText = "Copied!";
-                btn.classList.remove('bg-blue-600', 'hover:bg-blue-500');
-                btn.classList.add('bg-emerald-600');
-                setTimeout(() => {
-                    btn.innerText = "Copy to Clipboard";
-                    btn.classList.add('bg-blue-600', 'hover:bg-blue-500');
-                    btn.classList.remove('bg-emerald-600');
-                    closeModal();
-                }, 800);
-            });
-        }
-
-        // --- QR Modal ---
-        function toggleQRModal() {
-            const modal = document.getElementById('qr-modal');
-            modal.classList.toggle('hidden');
-        }
-
+        function toggleQRModal() { document.getElementById('qr-modal').classList.toggle('hidden'); }
         function renderQR(url) {
             document.getElementById('lan-url-display').innerText = url;
             const container = document.getElementById('lan-qr');
             container.innerHTML = '';
-            new QRCode(container, {
-                text: url,
-                width: 180,
-                height: 180,
-                colorDark: "#0b0f19",
-                colorLight: "#ffffff",
-                correctLevel: QRCode.CorrectLevel.M
+            new QRCode(container, { text: url, width: 220, height: 220, colorDark: "#0b0f19", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+        }
+        function escapeHtml(str) { return String(str).replace(/[&<>"']/g, s => ({'&': '&amp;','<': '&lt;','>': '&gt;','"': '&quot;',"'": '&#39;'})[s]); }
+        function copyTextAndFlash(text, btnElement) {
+            navigator.clipboard.writeText(text).then(() => {
+                btnElement.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i> Copied!';
+                btnElement.classList.replace('bg-blue-600', 'bg-emerald-600');
+                btnElement.classList.replace('hover:bg-blue-500', 'hover:bg-emerald-500');
+                lucide.createIcons();
+                setTimeout(() => { document.getElementById('incoming-modal').classList.add('hidden'); }, 1000);
             });
         }
-
-        function escapeHtml(string) {
-            return String(string).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        function flashSuccess() {
+            document.getElementById('target-active').classList.add('border-emerald-500', 'bg-emerald-950/20');
+            setTimeout(() => document.getElementById('target-active').classList.remove('border-emerald-500', 'bg-emerald-950/20'), 800);
         }
 
-        // Initialize connection
+        lucide.createIcons();
         initWebSocket();
     </script>
 </body>
