@@ -3,387 +3,374 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>LocalDrop - P2P Network Share</title>
+    <title>LocalDrop - LAN Share</title>
     
-    <!-- External Libraries (Loaded via CDN to keep this 1 file) -->
+    <!-- Tailwind CSS & QR Generator CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
     <style>
-        body { background-color: #0f172a; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; }
+        body { background-color: #0b0f19; color: #f3f4f6; font-family: system-ui, -apple-system, sans-serif; }
+        .modal-backdrop { background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(8px); }
         .hidden { display: none !important; }
-        .modal { background: rgba(0,0,0,0.8); backdrop-filter: blur(4px); }
-        #reader { width: 100%; border-radius: 0.5rem; overflow: hidden; }
-        #reader video { object-fit: cover; }
+        .device-card:hover { border-color: #3b82f6; }
     </style>
 </head>
-<body class="min-h-screen flex flex-col items-center justify-center p-4">
+<body class="min-h-screen flex flex-col items-center justify-between p-4 md:p-8">
 
-    <!-- Header -->
-    <header class="w-full max-w-md flex justify-between items-center mb-8">
-        <h1 class="text-2xl font-bold text-blue-400">LocalDrop <span class="text-sm text-gray-500 font-normal ml-1">P2P</span></h1>
-        <div id="status-badge" class="px-3 py-1 bg-gray-800 rounded-full text-xs text-gray-400 font-mono">Status: Offline</div>
-    </header>
-
-    <!-- MAIN MENU -->
-    <main id="view-home" class="w-full max-w-md flex flex-col gap-4">
-        <div class="bg-gray-800 p-6 rounded-xl text-center shadow-lg">
-            <h2 class="text-lg mb-4 text-gray-300">Device Setup</h2>
-            <input type="text" id="device-name" placeholder="E.g., Matty's iPhone" class="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white mb-4 focus:outline-none focus:border-blue-500 text-center" />
-            <div class="grid grid-cols-2 gap-4">
-                <button onclick="startHost()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-lg transition-colors shadow-md">
-                    Host (Send/Recv)
-                </button>
-                <button onclick="startJoin()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 rounded-lg transition-colors shadow-md">
-                    Join (Scan/Paste)
-                </button>
-            </div>
-        </div>
-    </main>
-
-    <!-- HOSTING SCREEN -->
-    <main id="view-host" class="w-full max-w-md hidden flex-col gap-4">
-        <div class="bg-gray-800 p-6 rounded-xl shadow-lg flex flex-col items-center">
-            <h2 class="text-lg font-bold mb-2">Step 1: Other device scans this</h2>
-            <p class="text-xs text-gray-400 mb-4 text-center">Waiting for network routing (ICE) to finish generating...</p>
-            
-            <div id="host-qr-container" class="bg-white p-2 rounded-lg mb-4 hidden"></div>
-            
-            <div class="w-full mb-4">
-                <label class="text-xs text-gray-400">Or paste this string manually:</label>
-                <div class="flex mt-1">
-                    <input type="text" id="host-code-output" readonly class="flex-1 bg-gray-900 border border-gray-700 rounded-l-lg p-2 text-xs text-gray-400" />
-                    <button onclick="copyElement('host-code-output')" class="bg-gray-700 px-3 rounded-r-lg hover:bg-gray-600 text-sm">Copy</button>
-                </div>
-            </div>
-
-            <div class="w-full border-t border-gray-700 pt-4 mt-2">
-                <h2 class="text-lg font-bold mb-2 text-center">Step 2: Read their reply</h2>
-                <div class="flex gap-2">
-                    <button onclick="startScanner('host-reader', handleAnswerScan)" class="flex-1 bg-blue-600 hover:bg-blue-500 py-2 rounded-lg text-sm font-bold">Open Camera</button>
-                </div>
-                <div id="host-reader" class="mt-4 hidden"></div>
-                
-                <div class="flex mt-4">
-                    <input type="text" id="host-answer-input" placeholder="Or paste their reply code here" class="flex-1 bg-gray-900 border border-gray-700 rounded-l-lg p-2 text-xs text-white" />
-                    <button onclick="processManualAnswer()" class="bg-emerald-600 px-3 rounded-r-lg hover:bg-emerald-500 text-sm font-bold">Link</button>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <!-- JOINING SCREEN -->
-    <main id="view-join" class="w-full max-w-md hidden flex-col gap-4">
-        <div class="bg-gray-800 p-6 rounded-xl shadow-lg flex flex-col items-center">
-            <h2 class="text-lg font-bold mb-4">Step 1: Scan Host Code</h2>
-            
-            <button onclick="startScanner('join-reader', handleOfferScan)" id="join-scan-btn" class="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-lg font-bold mb-4">Open Camera</button>
-            <div id="join-reader" class="w-full mb-4 hidden"></div>
-
-            <div class="w-full">
-                <label class="text-xs text-gray-400">Or paste host string manually:</label>
-                <div class="flex mt-1 mb-6">
-                    <input type="text" id="join-offer-input" class="flex-1 bg-gray-900 border border-gray-700 rounded-l-lg p-2 text-xs text-white" />
-                    <button onclick="processManualOffer()" class="bg-emerald-600 px-3 rounded-r-lg hover:bg-emerald-500 text-sm font-bold">Process</button>
-                </div>
-            </div>
-
-            <div id="join-response-section" class="w-full border-t border-gray-700 pt-4 hidden flex-col items-center">
-                <h2 class="text-lg font-bold mb-2">Step 2: Show this to Host</h2>
-                <div id="join-qr-container" class="bg-white p-2 rounded-lg mb-4"></div>
-                <div class="w-full">
-                    <label class="text-xs text-gray-400">Or copy reply string:</label>
-                    <div class="flex mt-1">
-                        <input type="text" id="join-code-output" readonly class="flex-1 bg-gray-900 border border-gray-700 rounded-l-lg p-2 text-xs text-gray-400" />
-                        <button onclick="copyElement('join-code-output')" class="bg-gray-700 px-3 rounded-r-lg hover:bg-gray-600 text-sm">Copy</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <!-- CHAT / TRANSFER SCREEN -->
-    <main id="view-chat" class="w-full max-w-md hidden flex-col h-[70vh]">
-        <div id="chat-box" class="flex-1 bg-gray-900 rounded-xl border border-gray-700 p-4 mb-4 overflow-y-auto space-y-4 shadow-inner">
-            <div class="text-center text-xs text-gray-500 my-2">Secure P2P Connection Established</div>
+    <!-- Top Navigation -->
+    <header class="w-full max-w-2xl flex items-center justify-between border-b border-gray-800 pb-4 mb-6">
+        <div class="flex items-center gap-2">
+            <div class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div>
+            <h1 class="text-xl font-black tracking-tight text-white">LocalDrop</h1>
         </div>
         
-        <div class="flex gap-2">
-            <textarea id="chat-input" rows="2" placeholder="Paste text, links, or messages here..." class="flex-1 bg-gray-800 border border-gray-600 rounded-lg p-3 text-white focus:outline-none focus:border-blue-500 resize-none"></textarea>
-            <button onclick="sendMessage()" class="bg-blue-600 hover:bg-blue-500 font-bold px-6 rounded-lg transition-colors">Send</button>
+        <div class="flex items-center gap-3">
+            <button onclick="toggleQRModal()" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 font-medium px-3 py-1.5 rounded-lg border border-gray-700 transition">
+                📲 Show LAN QR
+            </button>
+            <div id="connection-status" class="text-xs font-mono px-3 py-1.5 rounded-lg bg-gray-800 border border-gray-700 text-gray-400">
+                Connecting...
+            </div>
         </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="w-full max-w-2xl flex-1 flex flex-col gap-6">
+
+        <!-- My Device Info Banner -->
+        <section class="bg-gray-900/90 border border-gray-800 p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
+            <div class="flex items-center gap-4 w-full sm:w-auto">
+                <div class="w-12 h-12 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-xl">
+                    💻
+                </div>
+                <div>
+                    <div class="text-xs text-gray-400 font-medium uppercase tracking-wider">Your Device</div>
+                    <input type="text" id="my-name-input" class="bg-transparent font-bold text-lg text-white border-b border-dashed border-gray-700 focus:border-blue-500 focus:outline-none" />
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 w-full sm:w-auto justify-end">
+                <div class="text-right">
+                    <div class="text-[10px] text-gray-400 font-medium uppercase tracking-wider">Your 4-Digit Code</div>
+                    <div id="my-code-display" class="font-mono text-2xl font-black text-emerald-400 tracking-widest">----</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Message Composer -->
+        <section class="bg-gray-900/90 border border-gray-800 p-5 rounded-2xl flex flex-col gap-3 shadow-xl">
+            <div class="flex justify-between items-center">
+                <label for="text-payload" class="text-xs font-bold uppercase tracking-wider text-gray-400">Content to Send</label>
+                <button onclick="clearInput()" class="text-xs text-gray-500 hover:text-gray-300">Clear</button>
+            </div>
+            <textarea id="text-payload" rows="3" placeholder="Paste links, text, code, or notes here..." class="w-full bg-gray-950 border border-gray-800 rounded-xl p-4 text-white text-sm focus:outline-none focus:border-blue-500 transition resize-none"></textarea>
+            
+            <div class="flex flex-col sm:flex-row gap-2 pt-2 border-t border-gray-800/80">
+                <input type="text" id="target-code-input" placeholder="Enter 4-digit code" maxlength="4" class="sm:w-44 bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-center font-mono text-sm text-white focus:outline-none focus:border-blue-500 tracking-widest uppercase" />
+                <button onclick="sendByCode()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-4 rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/20">
+                    <span>Send via Code</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- Active Devices On Network -->
+        <section class="flex-1 flex flex-col">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="text-sm font-bold uppercase tracking-wider text-gray-400">Active Devices on LAN</h2>
+                <span id="device-count" class="text-xs bg-gray-800 border border-gray-700 px-2 py-0.5 rounded-full text-gray-400">0 online</span>
+            </div>
+
+            <div id="device-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 content-start">
+                <!-- Dynamic cards render here -->
+            </div>
+
+            <div id="no-devices-msg" class="p-8 text-center border border-dashed border-gray-800 rounded-2xl text-gray-500 text-sm">
+                No other devices detected on this network yet.<br>
+                <span class="text-xs text-gray-600">Scan the QR code to connect your phone or another laptop!</span>
+            </div>
+        </section>
+
     </main>
 
-    <!-- INCOMING MESSAGE MODAL -->
-    <div id="recv-modal" class="modal fixed inset-0 z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 w-full max-w-sm shadow-2xl">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="font-bold text-emerald-400">Incoming text from: <span id="recv-sender" class="text-white"></span></h3>
-                <span id="recv-time" class="text-xs text-gray-400"></span>
+    <!-- Footer -->
+    <footer class="w-full max-w-2xl text-center text-xs text-gray-600 py-4 mt-6">
+        Direct Local Area Network Transfer &bull; Sub-millisecond latency
+    </footer>
+
+    <!-- INCOMING DATA MODAL -->
+    <div id="incoming-modal" class="modal-backdrop fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md shadow-2xl flex flex-col gap-4">
+            <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl">📥</span>
+                    <div>
+                        <h3 class="font-bold text-white text-sm" id="modal-sender-name">Unknown Device</h3>
+                        <p class="text-[10px] text-gray-400" id="modal-time"></p>
+                    </div>
+                </div>
+                <span class="text-xs font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded">Received</span>
             </div>
-            <div id="recv-content" class="bg-gray-900 p-4 rounded-lg text-white text-sm mb-4 max-h-48 overflow-y-auto break-words select-all">
-                <!-- Content goes here -->
+
+            <div id="modal-content" class="bg-gray-950 border border-gray-800 p-4 rounded-xl text-gray-200 text-sm max-h-60 overflow-y-auto whitespace-pre-wrap break-words font-mono select-all">
             </div>
+
             <div class="flex gap-2">
-                <button onclick="copyRecvContent()" class="flex-1 bg-blue-600 hover:bg-blue-500 font-bold py-2 rounded-lg">Copy to Clipboard</button>
-                <button onclick="closeRecvModal()" class="bg-gray-700 hover:bg-gray-600 font-bold px-4 py-2 rounded-lg">Dismiss</button>
+                <button onclick="copyModalContent()" id="copy-btn" class="flex-1 bg-blue-600 hover:bg-blue-500 font-bold py-2.5 rounded-xl transition text-sm">
+                    Copy to Clipboard
+                </button>
+                <button onclick="closeModal()" class="bg-gray-800 hover:bg-gray-700 font-bold px-4 py-2.5 rounded-xl text-gray-300 transition text-sm">
+                    Close
+                </button>
             </div>
         </div>
     </div>
 
-    <!-- APP LOGIC -->
-    <script>
-        // --- State ---
-        const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-        let pc, dc, html5QrcodeScanner;
-        
-        // Setup initial device name
-        const defaultNames = ['MacBook', 'iPhone', 'Windows PC', 'Linux Box', 'iPad'];
-        const savedName = localStorage.getItem('localDropName') || defaultNames[Math.floor(Math.random() * defaultNames.length)] + '-' + Math.floor(Math.random()*100);
-        document.getElementById('device-name').value = savedName;
-
-        // --- View Management ---
-        function showView(id) {
-            ['view-home', 'view-host', 'view-join', 'view-chat'].forEach(v => document.getElementById(v).classList.add('hidden'));
-            document.getElementById(id).classList.remove('hidden');
-        }
-
-        function updateStatus(text, colorClass) {
-            const badge = document.getElementById('status-badge');
-            badge.innerText = text;
-            badge.className = `px-3 py-1 rounded-full text-xs font-mono text-white ${colorClass}`;
-        }
-
-        // --- WebRTC Setup (Host) ---
-        async function startHost() {
-            localStorage.setItem('localDropName', document.getElementById('device-name').value);
-            showView('view-host');
+    <!-- LAN QR CODE MODAL -->
+    <div id="qr-modal" class="modal-backdrop fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-xs shadow-2xl flex flex-col items-center gap-4">
+            <h3 class="font-bold text-white text-center">Scan to Open on Mobile</h3>
             
-            pc = new RTCPeerConnection(rtcConfig);
-            dc = pc.createDataChannel('p2p-channel');
-            setupDataChannel(dc);
+            <div id="lan-qr" class="bg-white p-3 rounded-xl shadow-inner"></div>
+            
+            <p id="lan-url-display" class="font-mono text-xs text-blue-400 break-all text-center"></p>
 
-            pc.oniceconnectionstatechange = () => handleConnectionState(pc.iceConnectionState);
+            <button onclick="toggleQRModal()" class="w-full bg-gray-800 hover:bg-gray-700 font-bold py-2 rounded-xl text-gray-300 transition text-sm">
+                Dismiss
+            </button>
+        </div>
+    </div>
 
-            // Wait for all local network routes to be found before generating code
-            pc.onicegatheringstatechange = () => {
-                if (pc.iceGatheringState === 'complete') {
-                    const offerStr = JSON.stringify(pc.localDescription);
-                    const compressed = LZString.compressToEncodedURIComponent(offerStr);
-                    renderQR('host-qr-container', compressed);
-                    document.getElementById('host-code-output').value = compressed;
-                    document.getElementById('host-qr-container').classList.remove('hidden');
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        let ws = null;
+        let myId = localStorage.getItem('localdrop_id') || 'peer_' + Math.random().toString(36).substring(2, 9);
+        localStorage.setItem('localdrop_id', myId);
+
+        // Auto-detect OS/device type for an intuitive default name
+        function detectDeviceName() {
+            const ua = navigator.userAgent;
+            if (/iPad|iPhone|iPod/.test(ua)) return 'Apple iPhone';
+            if (/Macintosh/.test(ua)) return 'MacBook';
+            if (/Windows/.test(ua)) return 'Windows PC';
+            if (/Android/.test(ua)) return 'Android Phone';
+            if (/Linux/.test(ua)) return 'Linux Box';
+            return 'Workstation';
+        }
+
+        let myName = localStorage.getItem('localdrop_name') || detectDeviceName();
+        document.getElementById('my-name-input').value = myName;
+
+        let activePeers = [];
+        let lanUrl = window.location.origin;
+
+        // --- WebSocket Setup ---
+        function initWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                updateConnectionStatus('Online', 'text-emerald-400', 'border-emerald-800/50');
+                ws.send(JSON.stringify({
+                    type: 'register',
+                    id: myId,
+                    name: myName
+                }));
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'registered') {
+                    document.getElementById('my-code-display').innerText = data.code;
+                    lanUrl = data.local_url;
+                    renderQR(lanUrl);
+                } else if (data.type === 'peer_list') {
+                    activePeers = data.peers.filter(p => p.id !== myId);
+                    renderPeers();
+                } else if (data.type === 'incoming_data') {
+                    showIncomingModal(data.sender_name, data.payload);
+                } else if (data.type === 'send_ack') {
+                    if (data.success) {
+                        flashSuccess("Sent successfully!");
+                    } else {
+                        alert(data.error || "Failed to send to target device.");
+                    }
                 }
             };
 
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-        }
-
-        // --- WebRTC Setup (Join) ---
-        function startJoin() {
-            localStorage.setItem('localDropName', document.getElementById('device-name').value);
-            showView('view-join');
-        }
-
-        async function processHostOffer(compressedOffer) {
-            try {
-                const offerStr = LZString.decompressFromEncodedURIComponent(compressedOffer);
-                const offer = JSON.parse(offerStr);
-
-                pc = new RTCPeerConnection(rtcConfig);
-                
-                pc.ondatachannel = event => {
-                    dc = event.channel;
-                    setupDataChannel(dc);
-                };
-
-                pc.oniceconnectionstatechange = () => handleConnectionState(pc.iceConnectionState);
-
-                pc.onicegatheringstatechange = () => {
-                    if (pc.iceGatheringState === 'complete') {
-                        const answerStr = JSON.stringify(pc.localDescription);
-                        const compressed = LZString.compressToEncodedURIComponent(answerStr);
-                        document.getElementById('join-response-section').classList.remove('hidden');
-                        document.getElementById('join-scan-btn').classList.add('hidden');
-                        renderQR('join-qr-container', compressed);
-                        document.getElementById('join-code-output').value = compressed;
-                    }
-                };
-
-                await pc.setRemoteDescription(offer);
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                
-                if (html5QrcodeScanner) html5QrcodeScanner.clear();
-
-            } catch (e) {
-                alert("Invalid Host Code!");
-                console.error(e);
-            }
-        }
-
-        // --- Handshake Finalization ---
-        async function finalizeHostConnection(compressedAnswer) {
-            try {
-                const answerStr = LZString.decompressFromEncodedURIComponent(compressedAnswer);
-                const answer = JSON.parse(answerStr);
-                await pc.setRemoteDescription(answer);
-                if (html5QrcodeScanner) html5QrcodeScanner.clear();
-            } catch (e) {
-                alert("Invalid Answer Code!");
-                console.error(e);
-            }
-        }
-
-        // --- Manual Flow Buttons ---
-        function processManualOffer() {
-            const val = document.getElementById('join-offer-input').value.trim();
-            if (val) processHostOffer(val);
-        }
-
-        function processManualAnswer() {
-            const val = document.getElementById('host-answer-input').value.trim();
-            if (val) finalizeHostConnection(val);
-        }
-
-        // --- Data Channel Logic ---
-        function setupDataChannel(channel) {
-            channel.onopen = () => {
-                showView('view-chat');
-                updateStatus('Connected', 'bg-emerald-600');
-            };
-            
-            channel.onclose = () => {
-                updateStatus('Disconnected', 'bg-red-600');
+            ws.onclose = () => {
+                updateConnectionStatus('Disconnected', 'text-red-400', 'border-red-800/50');
+                setTimeout(initWebSocket, 2000);
             };
 
-            channel.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                showRecvModal(data);
-                appendLog(data.sender, data.content, false);
+            ws.onerror = () => {
+                ws.close();
             };
         }
 
-        function handleConnectionState(state) {
-            if (state === 'disconnected' || state === 'failed') {
-                updateStatus('Connection Lost', 'bg-red-600');
-            }
+        function updateConnectionStatus(text, textColor, borderColor) {
+            const el = document.getElementById('connection-status');
+            el.innerText = text;
+            el.className = `text-xs font-mono px-3 py-1.5 rounded-lg bg-gray-900 border ${borderColor} ${textColor}`;
         }
 
-        // --- Messaging ---
-        function sendMessage() {
-            if (!dc || dc.readyState !== 'open') {
-                alert("Not connected!");
-                return;
-            }
-            
-            const input = document.getElementById('chat-input');
-            const text = input.value.trim();
-            if (!text) return;
-
-            const myName = document.getElementById('device-name').value;
-            const payload = {
-                type: 'text',
-                sender: myName,
-                timestamp: new Date().toLocaleTimeString(),
-                content: text
-            };
-
-            dc.send(JSON.stringify(payload));
-            appendLog('Me', text, true);
-            input.value = '';
-        }
-
-        // Enter key to send
-        document.getElementById('chat-input').addEventListener('keypress', function (e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
+        // --- Name Change Sync ---
+        document.getElementById('my-name-input').addEventListener('change', (e) => {
+            myName = e.target.value.trim() || 'My Device';
+            localStorage.setItem('localdrop_name', myName);
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'update_name',
+                    name: myName
+                }));
             }
         });
 
-        // --- UI Helpers ---
-        function renderQR(containerId, data) {
-            const container = document.getElementById(containerId);
+        // --- Render Active Devices ---
+        function renderPeers() {
+            const grid = document.getElementById('device-grid');
+            const noDev = document.getElementById('no-devices-msg');
+            const count = document.getElementById('device-count');
+
+            count.innerText = `${activePeers.length} online`;
+            grid.innerHTML = '';
+
+            if (activePeers.length === 0) {
+                noDev.classList.remove('hidden');
+                return;
+            }
+
+            noDev.classList.add('hidden');
+
+            activePeers.forEach(peer => {
+                const card = document.createElement('div');
+                card.className = "device-card bg-gray-900 border border-gray-800 hover:border-blue-500/50 p-4 rounded-xl flex items-center justify-between transition cursor-pointer group shadow-lg";
+                card.onclick = () => sendDirect(peer.id);
+                
+                card.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-gray-800 flex items-center justify-center text-lg group-hover:bg-blue-600/20 group-hover:text-blue-400 transition">
+                            📱
+                        </div>
+                        <div>
+                            <div class="font-bold text-sm text-white">${escapeHtml(peer.name)}</div>
+                            <div class="text-[10px] text-gray-500 font-mono tracking-widest">CODE: ${peer.code}</div>
+                        </div>
+                    </div>
+                    <button class="bg-blue-600 group-hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition shadow">
+                        Send &rarr;
+                    </button>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // --- Sending Actions ---
+        function sendDirect(targetId) {
+            const text = document.getElementById('text-payload').value.trim();
+            if (!text) {
+                alert("Please enter some text or a link to send first!");
+                document.getElementById('text-payload').focus();
+                return;
+            }
+
+            ws.send(JSON.stringify({
+                type: 'send_direct',
+                target_id: targetId,
+                payload: text
+            }));
+        }
+
+        function sendByCode() {
+            const code = document.getElementById('target-code-input').value.trim();
+            const text = document.getElementById('text-payload').value.trim();
+
+            if (!code || code.length !== 4) {
+                alert("Please enter a valid 4-digit code.");
+                return;
+            }
+            if (!text) {
+                alert("Please enter some text to send.");
+                return;
+            }
+
+            ws.send(JSON.stringify({
+                type: 'send_by_code',
+                target_code: code,
+                payload: text
+            }));
+        }
+
+        function clearInput() {
+            document.getElementById('text-payload').value = '';
+        }
+
+        function flashSuccess(msg) {
+            const textarea = document.getElementById('text-payload');
+            const originalBg = textarea.style.borderColor;
+            textarea.style.borderColor = '#10b981';
+            setTimeout(() => {
+                textarea.style.borderColor = originalBg;
+            }, 1000);
+        }
+
+        // --- Modal Display & Clipboard ---
+        function showIncomingModal(senderName, payload) {
+            document.getElementById('modal-sender-name').innerText = senderName;
+            document.getElementById('modal-time').innerText = new Date().toLocaleTimeString();
+            document.getElementById('modal-content').innerText = payload;
+            document.getElementById('incoming-modal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('incoming-modal').classList.add('hidden');
+        }
+
+        function copyModalContent() {
+            const text = document.getElementById('modal-content').innerText;
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = document.getElementById('copy-btn');
+                btn.innerText = "Copied!";
+                btn.classList.remove('bg-blue-600', 'hover:bg-blue-500');
+                btn.classList.add('bg-emerald-600');
+                setTimeout(() => {
+                    btn.innerText = "Copy to Clipboard";
+                    btn.classList.add('bg-blue-600', 'hover:bg-blue-500');
+                    btn.classList.remove('bg-emerald-600');
+                    closeModal();
+                }, 800);
+            });
+        }
+
+        // --- QR Modal ---
+        function toggleQRModal() {
+            const modal = document.getElementById('qr-modal');
+            modal.classList.toggle('hidden');
+        }
+
+        function renderQR(url) {
+            document.getElementById('lan-url-display').innerText = url;
+            const container = document.getElementById('lan-qr');
             container.innerHTML = '';
             new QRCode(container, {
-                text: data,
-                width: 200,
-                height: 200,
-                colorDark: "#000000",
+                text: url,
+                width: 180,
+                height: 180,
+                colorDark: "#0b0f19",
                 colorLight: "#ffffff",
-                correctLevel: QRCode.CorrectLevel.L // Low correction = less dense QR
+                correctLevel: QRCode.CorrectLevel.M
             });
         }
 
-        function appendLog(sender, text, isMe) {
-            const box = document.getElementById('chat-box');
-            const div = document.createElement('div');
-            div.className = `p-3 rounded-lg max-w-[85%] ${isMe ? 'bg-blue-600 ml-auto' : 'bg-gray-800 border border-gray-700 mr-auto'}`;
-            div.innerHTML = `<div class="text-[10px] text-gray-300 mb-1">${sender}</div><div class="text-sm whitespace-pre-wrap break-words">${text}</div>`;
-            box.appendChild(div);
-            box.scrollTop = box.scrollHeight;
+        function escapeHtml(string) {
+            return String(string).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
 
-        function copyElement(id) {
-            const el = document.getElementById(id);
-            el.select();
-            document.execCommand("copy");
-            alert("Copied to clipboard!");
-        }
-
-        // --- Scanner Logic ---
-        function startScanner(elementId, callback) {
-            document.getElementById(elementId).classList.remove('hidden');
-            html5QrcodeScanner = new Html5Qrcode(elementId);
-            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-            
-            html5QrcodeScanner.start({ facingMode: "environment" }, config, 
-                (decodedText) => {
-                    html5QrcodeScanner.stop();
-                    document.getElementById(elementId).classList.add('hidden');
-                    callback(decodedText);
-                },
-                (errorMessage) => { /* ignore constant scan errors */ }
-            ).catch(err => {
-                alert("Camera error. Are you running on HTTPS/GitHub Pages? If not, use the manual paste fallback.");
-                document.getElementById(elementId).classList.add('hidden');
-            });
-        }
-
-        function handleOfferScan(text) { processHostOffer(text); }
-        function handleAnswerScan(text) { finalizeHostConnection(text); }
-
-        // --- Receive Modal Logic ---
-        function showRecvModal(data) {
-            document.getElementById('recv-sender').innerText = data.sender;
-            document.getElementById('recv-time').innerText = data.timestamp;
-            document.getElementById('recv-content').innerText = data.content;
-            document.getElementById('recv-modal').classList.remove('hidden');
-        }
-
-        function closeRecvModal() {
-            document.getElementById('recv-modal').classList.add('hidden');
-        }
-
-        function copyRecvContent() {
-            const text = document.getElementById('recv-content').innerText;
-            navigator.clipboard.writeText(text).then(() => {
-                closeRecvModal();
-            }).catch(err => {
-                // Fallback for older browsers
-                const textArea = document.createElement("textarea");
-                textArea.value = text;
-                document.body.appendChild(textArea);
-                textArea.select();
-                document.execCommand("Copy");
-                textArea.remove();
-                closeRecvModal();
-            });
-        }
+        // Initialize connection
+        initWebSocket();
     </script>
 </body>
 </html>
